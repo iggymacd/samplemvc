@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Samplemvc</title>
+    <link rel="stylesheet" href="samplemvc.css">
+    <link href="styles/css/bootstrap.css" rel="stylesheet">
+    <link href="styles/css/responsive.css" rel="stylesheet">
+    <link rel="components" href="rotatetext.html">
+    <!--<link rel="components" href="card.html">-->
+    <link rel="components" href="deck.html">
+  </head>
+  <body>
+    <h1>Samplemvc</h1>    
+    <p>Hello Dartisans!</p>    
+    <div id="container"> 
+        <template instantiate="if newGame">
+		      <button id="deal-cards" data-action="click:dealCards">
+		        Deal Cards!
+		      </button>
+        </template>
+    
+        <template>
+      <div class="row"> 
+            <div id='dealerDeck' class='well span3 offset1'>
+            <x-card-deck data-value="deck:dealerDeck"></x-card-deck>
+            </div>
+            <div id='discardDeck' class='well span3 offset1'>
+            <x-card-deck data-value="deck:discardDeck"></x-card-deck>
+            </div>
+      </div>
+      <div class="row"> 
+            <div id='northDeck' class='well span3 offset4'>
+            <x-card-deck data-value="deck:northDeck"></x-card-deck>
+            </div>
+      </div>
+      <div class="row"> 
+            <div id='westDeck' class='well span3'>
+            <x-card-deck data-value="deck:westDeck"></x-card-deck>
+            </div>
+            <div id='round' class='well span3 offset1'>
+            <x-card-deck data-value="deck:roundDeck"></x-card-deck>
+            </div>
+            <div id='eastDeck' class='well span3 offset1'>
+            <x-card-deck data-value="deck:eastDeck"></x-card-deck>
+            </div>
+      </div>
+      <div class="row"> 
+            <div id='southDeck' class='well span3 offset4'>
+            <x-card-deck data-value="deck:southDeck"></x-card-deck>
+            </div>
+      </div>
+        </template>
+    </div>
+		<script type="application/dart">
+			import 'dart:html';
+			import 'model.dart';
+			import 'playing_cards.dart';
+			import 'package:web_components/web_components.dart';
+			bool newGame = true;
+			main() {
+			
+			}
+      Deck get dealerDeck{
+       return app.decks['dealer'];
+      }
+      Deck get discardDeck{
+       return app.decks['discard'];
+      }
+      Deck get roundDeck{
+       return app.decks['round'];
+      }
+      Deck get northDeck{
+       return app.decks['north'];
+      }
+      Deck get southDeck{
+       return app.decks['south'];
+      }
+      Deck get eastDeck{
+       return app.decks['east'];
+      }
+			Deck get westDeck{
+			 return app.decks['west'];
+			}
+			void dealCards(e){
+			 newGame = false;
+			 //print('in deal cards');
+			 app.dealCards();
+			}
+		</script>
+  </body>
+</html>

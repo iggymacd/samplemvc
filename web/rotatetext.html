@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<body>
+<element name="x-rotate-text" extends="div" constructor="RotateText"
+         apply-author-styles="">
+  <template>
+  <span>{{greeting}}</span>
+      <span class="view" data-action="click:reverseText">
+      {{currentText}}
+      </span>
+  </template>
+  <script type="application/dart">
+import 'dart:html';
+import 'package:web_components/web_components.dart';
+class RotateText extends WebComponent {
+var currentText = 'Click me!';
+  String greeting = 'Hello ';
+
+void reverseText(Event event) {
+  var text = currentText;
+  var buffer = new StringBuffer();
+  for (int i = currentText.length - 1; i >= 0; i--) {
+    buffer.add(currentText[i]);
+  }
+  currentText = buffer.toString();
+}
+  }
+  </script>
+</element>
+</body>
+</html>

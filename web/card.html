@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<body>
+<element name="x-playing-card" extends="span" constructor="PlayingCardComponent">
+  <template>
+<style scoped>
+.card{display:inline-block;width:3.3em;height:4.6em;border:1px solid #666;border-radius:.3em;-webkit-border-radius:0.3em;-moz-border-radius:0.3em;border-radius:0.3em;padding:.25em;margin:0 -2.5em .5em 0;text-align:center;font-size:1.2em;font-weight:normal;font-family:Arial,sans-serif;position:relative;bottom:0;-webkit-transition:bottom .15s;-moz-transition:bottom .15s;-ms-transition:bottom .15s;-o-transition:bottom .15s;transition:bottom .15s;background-color:#fff;-webkit-box-shadow:.2em .2em .5em #333;-moz-box-shadow:.2em .2em .5em #333;box-shadow:.2em .2em .5em #333;}
+.card.diams:hover, .card.clubs:hover, .card.hearts:hover, .card.spades:hover{bottom:1em;-webkit-transition:bottom .15s;-moz-transition:bottom .15s;-ms-transition:bottom .15s;-o-transition:bottom .15s;transition:bottom .15s;}
+.card.diams{color:#f00;}
+.card.hearts{color:#f00;}
+.card.spades{color:#000;}
+.card.clubs{color:#000;}
+.card.deck{margin:0 -4.17em 0 0;}
+.back{background-image: url("../img/cardback.gif");}
+.card .rank,.card .suit{display:block;line-height:1;text-align:left;}
+.card .suit{line-height:.7;}
+.card .rank:after{position:absolute;top:.25em;left:.25em;background:#fff;}
+.card .suit:after{font-family:Georgia, serif;position:absolute;font-size:3em;right:.1em;bottom:.25em;word-spacing:normal;letter-spacing:normal;line-height:1;}
+.card .suit:after{font-family:Arial,sans-serif;line-height:.9;bottom:.35em;}
+.card.diams .suit:after{content:"\2666";right:.4em;}
+.card.hearts .suit:after{content:"\2665";right:.35em;}
+.card.spades .suit:after{content:"\2660";right:.35em;}
+.card.clubs .suit:after{content:"\2663";right:.3em;}
+</style>
+    <span class="{{cardClasses}}" data-action="click:playCard">
+      <span class="rank">{{rank}}</span>
+      <span class="suit">{{suit}}</span>
+    </span>
+  </template>
+<script type="application/dart">
+	import 'package:web_components/web_components.dart';
+	import 'model.dart';	
+  import 'playing_cards.dart';
+	class PlayingCardComponent extends WebComponent {
+	   ShadowRoot _shadowRoot;
+		Card card;
+    String get rank{
+     return (card.isFaceUp ? card.rank.letter : '');
+    }
+		String get suit{
+		 return (card.isFaceUp ? card.suit.entityName : '');
+		}
+	  String get cardClasses{
+	   String result = Strings.join(card.classList, ' ');
+	   return result;
+	  }
+	  void playCard(e){
+      if(!card.isPlayable){
+        return;
+      }
+      //e.preventDefault();
+      print('in child play card');
+      Deck southDeck = app.decks['south'];
+      if(!southDeck.isNextToPlay){
+        print('not your turn');
+        return;
+      }
+      List cards = southDeck.cards;
+      num cardIndex = cards.indexOf(card);
+      if(cardIndex == -1){
+        return;
+      }
+      Card cardPlayed = cards.removeAt(cardIndex);
+      card.isPlayable = false;
+      card.isFaceUp = false;
+      app.decks['round'].addCard(cardPlayed);
+      southDeck.isNextToPlay = false;
+      app.decks['west'].isNextToPlay = true;
+      //e.srcElement.parent.parent.elements.forEach((f){
+        //print(f.text);
+      //});
+    }
+	  
+	}
+</script>
+</element>
+</body>
+</html>

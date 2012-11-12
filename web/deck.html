@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head><link rel="components" href="card.html"></head>
+<body>
+<element name="x-card-deck" extends="div" constructor="CardDeckComponent">
+  <template>
+		<h2>{{deckName}}</h2>
+		<div class="hand">
+		    <template iterate="x in cards">
+		    <!--<p>{{x.id}}</p>-->
+		      <x-playing-card data-value="card:x"></x-playing-card>
+		    </template>
+		</div>
+    <h2>{{status}}</h2>
+<!--		</div> -->
+  </template>
+<script type="application/dart">
+  import 'package:web_components/web_components.dart';
+  import 'model.dart';
+  import 'playing_cards.dart';
+  
+  class CardDeckComponent extends WebComponent {
+    Deck deck;
+    //String deckName;
+    List<Card> get cards{
+      return deck.cards;
+    }
+    String get status{
+      String result = '';
+      if(deck.isDealer){
+        result = '$result Dealer ';
+      }
+      else if(deck.isNextToPlay){
+        result = '$result Next to Play';
+      }
+      return result;
+    } 
+    String get deckName => deck.name;
+    String get deckClasses{
+      //print(deck.name);
+      return (deck.name == 'dealer' ? 'deck' : '') ;
+    }
+  }
+</script>
+</element>
+</body>
+</html>

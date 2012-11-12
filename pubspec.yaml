@@ -1,0 +1,6 @@
+name:  samplemvc
+description:  A sample application
+
+version: 0.0.2
+dependencies:
+  web_components: any
