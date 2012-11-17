@@ -120,6 +120,9 @@ class PlayingCardComponent extends WebComponent {
   
   /** Original code from the component. */
   
+  PlayingCardComponent(){
+    
+  }
   ShadowRoot _shadowRoot;
   Card card;
   String get rank{
@@ -133,31 +136,32 @@ class PlayingCardComponent extends WebComponent {
     return result;
   }
   void playCard(e){
-    if(!card.isPlayable){
-      return;
-    }
-    //e.preventDefault();
-    print('in child play card');
-    Deck southDeck = app.decks['south'];
-    if(!southDeck.isNextToPlay){
-      print('not your turn');
-      return;
-    }
-    List cards = southDeck.cards;
-    num cardIndex = cards.indexOf(card);
-    if(cardIndex == -1){
-      return;
-    }
-    Card cardPlayed = cards.removeAt(cardIndex);
-    card.isPlayable = false;
-    card.isFaceUp = false;
-    app.decks['round'].addCard(cardPlayed);
-    southDeck.isNextToPlay = false;
-    app.decks['west'].isNextToPlay = true;
-    //e.srcElement.parent.parent.elements.forEach((f){
-      //print(f.text);
-      //});
-    }
-    
-  }
-  
+    Future<String>
+    //if(!card.isPlayable){
+      //return;
+      //}
+      //e.preventDefault();
+      //print('in child play card');
+      //Deck southDeck = app.decks['south'];
+      //if(!southDeck.isNextToPlay){
+        //print('not your turn');
+        //return;
+        //}
+        //List cards = southDeck.cards;
+        //num cardIndex = cards.indexOf(card);
+        //if(cardIndex == -1){
+          //return;
+          //}
+          //Card cardPlayed = cards.removeAt(cardIndex);
+          //card.isPlayable = false;
+          //card.isFaceUp = false;
+          //app.decks['round'].addCard(cardPlayed);
+          //southDeck.isNextToPlay = false;
+          //app.decks['west'].isNextToPlay = true;
+          //e.srcElement.parent.parent.elements.forEach((f){
+            //print(f.text);
+            //});
+          }
+          
+        }
+        

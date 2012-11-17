@@ -28,7 +28,8 @@ class App {
   //Game currentGame;
   num dealer;
   num nextToPlay;
-  var sender;
+  SendPort gamePort;
+  ReceivePort loggerPort;
   App(){
     cards = createDeck();
     decks = new Map<String,Deck>();
@@ -45,6 +46,16 @@ class App {
     decks[positions[nextToPlay]].isNextToPlay = true;
     //currentGame = new Game();
     //cards = shuffle(cards);
+    loggerPort = new ReceivePort();
+    loggerPort.receive((Message msg, _) {
+      if (msg.type == Message.MESSAGE) {
+        print('shutting down');
+        print(msg.from);
+        print(msg.message);
+        print(msg.toMap());
+        //receiver.close();
+      }
+    });
   }
   void startGame(){
     num nextPlayer = dealer + 1;
@@ -66,18 +77,8 @@ class App {
     }
 
 
-    sender = spawnFunction(gameIsolate);
-    var receiver = new ReceivePort();
-    receiver.receive((Message msg, _) {
-      if (msg.type == Message.MESSAGE) {
-        print('shutting down');
-        print(msg.from);
-        print(msg.message);
-        print(msg.toMap());
-        //receiver.close();
-      }
-    });
-    sender.send(new Message('north', 'shutdown'), receiver.toSendPort());
+    gamePort = spawnFunction(gameIsolate);
+    gamePort.send(new Message('north', 'shutdown'), loggerPort.toSendPort());
     
   }
   
