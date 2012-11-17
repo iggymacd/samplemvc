@@ -12,27 +12,25 @@
     <link rel="components" href="deck.html">
   </head>
   <body>
-    <h1>Samplemvc</h1>    
-    <p>Hello Dartisans!</p>    
+    <h1>Sample Card Game</h1>    
+    <p>Hello Tarabish Players</p>    
     <div id="container"> 
         <template instantiate="if newGame">
-		      <button id="deal-cards" data-action="click:dealCards">
-		        Deal Cards!
+		      <button id="start-game" data-action="click:startGame">
+		        Start Game!
 		      </button>
         </template>
     
         <template>
       <div class="row"> 
-            <div id='dealerDeck' class='well span3 offset1'>
+            <div id='dealerDeck' class='well span3'>
             <x-card-deck data-value="deck:dealerDeck"></x-card-deck>
+            </div>
+            <div id='northDeck' class='well span3 offset1'>
+            <x-card-deck data-value="deck:northDeck"></x-card-deck>
             </div>
             <div id='discardDeck' class='well span3 offset1'>
             <x-card-deck data-value="deck:discardDeck"></x-card-deck>
-            </div>
-      </div>
-      <div class="row"> 
-            <div id='northDeck' class='well span3 offset4'>
-            <x-card-deck data-value="deck:northDeck"></x-card-deck>
             </div>
       </div>
       <div class="row"> 
@@ -83,10 +81,9 @@
 			Deck get westDeck{
 			 return app.decks['west'];
 			}
-			void dealCards(e){
-			 newGame = false;
-			 //print('in deal cards');
-			 app.dealCards();
+			void startGame(e){
+				newGame = false;
+				app.startGame();
 			}
 		</script>
   </body>
