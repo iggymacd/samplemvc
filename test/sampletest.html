@@ -14,8 +14,17 @@
     </div>
     <script type="application/dart">
       import 'dart:html';
+      import 'dart:json';
+      import '../web/model.dart';
       import 'package:web_components/web_components.dart';
       main() {
+        Message m = new Message('al', 'myMessage');
+        print(m.toMap());
+        String jsonSample =  JSON.stringify(m.toMap());
+        print(jsonSample);
+        Message messageFromJson = Message.fromJson(jsonSample);
+        print(messageFromJson);
+        print(messageFromJson is Message);
       }
     </script>
   </body>

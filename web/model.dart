@@ -1,6 +1,7 @@
 library model;
 import 'dart:math';
 import 'dart:isolate';
+import 'dart:json';
 import 'playing_cards.dart';
 import 'package:web_components/watcher.dart';
 //import 'package:samplemvc/playing_cards.dart';
@@ -45,12 +46,12 @@ class App {
     //currentGame = new Game();
     //cards = shuffle(cards);
     loggerPort = new ReceivePort();
-    loggerPort.receive((Message msg, _) {
+    loggerPort.receive((Map msg, _) {
       //if (msg.type == Message.MESSAGE) {
         //print('shutting down');
-        print(msg.from);
+        print(msg['from']);
         //print(msg.message);
-        print(msg.toMap());
+        print(msg);
         //receiver.close();
       //}
     });
@@ -77,12 +78,12 @@ class App {
         nextPlayer++;
       }
 
-    gamePort.send(new Message.register('app'), loggerPort.toSendPort());
-    gamePort.send(new Message.start('app'), loggerPort.toSendPort());
+    gamePort.send(new Message.register('app').toMap(), loggerPort.toSendPort());
+    gamePort.send(new Message.start('app').toMap(), loggerPort.toSendPort());
     
   }
   
-  Future<Message> playCard(Card card, String position){
+  Future<Map> playCard(Card card, String position){
     Completer c = new Completer();
     ReceivePort returnPort = new ReceivePort();
     returnPort.receive((msg, replyTo) {
@@ -90,7 +91,7 @@ class App {
       c.complete(msg);
     } );
     if(gamePort != null){
-      gamePort.send(new Message.playCard(position,card), returnPort.toSendPort());
+      gamePort.send(new Message.playCard(position,card).toMap(), returnPort.toSendPort());
     }
     return c.future;
   }

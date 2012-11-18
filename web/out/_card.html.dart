@@ -139,9 +139,9 @@ class PlayingCardComponent extends WebComponent {
       print('not playable');
       return;
     }
-    Future<Message> playStatus = app.playCard(card, 'south');
+    Future<Map> playStatus = app.playCard(card, 'south');
     playStatus.then((result){
-      print('result is ${result.message}');
+      print('result is ${result}');
     });
     //if(!card.isPlayable){
       //return;

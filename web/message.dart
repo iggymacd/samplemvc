@@ -45,7 +45,13 @@ class Message {
   Message.register(this._from)
   : _received = new Date.now(), _type = REGISTER_LOGGER;
   Message.playCard(this._from, this._card)
-      : _received = new Date.now(), _type = PLAY_CARD;
+  : _received = new Date.now(), _type = PLAY_CARD;
+  Message.fromMap(Map sourceMap){
+    _from = sourceMap['from'];
+    _received = new Date.fromString(sourceMap['received']);
+    _type = sourceMap['type'];
+    _message = sourceMap['message'] == null ? null : sourceMap['message'];
+  }
 
   String get from => _from;
   Date get received => _received;
@@ -60,9 +66,27 @@ class Message {
     map["type"] = _type;
     map["typeName"] = _typeName[_type];
     if (_type == MESSAGE) map["message"] = _message;
-    if (_type == PLAY_CARD) map["card"] = _card;
+    if (_type == PLAY_CARD) map["card"] = _card.toMap();
     //map["number"] = _messageNumber;
     return map;
+  }
+
+  static Message fromJson(String jsonSource) {
+    Map jsonObject = JSON.parse(jsonSource);
+    Message result = new Message.fromMap(jsonObject);
+//    Map map = new Map();
+//    map["from"] = _from;
+//    map["received"] = _received.toString();
+//    map["type"] = _type;
+//    map["typeName"] = _typeName[_type];
+//    if (_type == MESSAGE) map["message"] = _message;
+//    if (_type == PLAY_CARD) map["card"] = _card;
+    //map["number"] = _messageNumber;
+    return result;
+  }
+  
+  String toString(){
+    return toMap().toString();
   }
 
   String _from;

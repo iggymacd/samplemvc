@@ -7,7 +7,7 @@ gameIsolate() {
   port.receive((msg, replyTo) {
     //print('doing some work ${app.cards.length}');
     if (replyTo != null){
-      if(msg is Message){
+      if(msg is Map){
         process(msg, replyTo);
       }else{
         //replyTo.send(msg);
@@ -18,7 +18,7 @@ gameIsolate() {
 }
 
 process(msg, sendPort) {
-  switch (msg.type) {
+  switch (msg['type']) {
     case 13:
       //logger = sendPort;
       logger.send(msg);
