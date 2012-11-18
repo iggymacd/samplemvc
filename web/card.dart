@@ -3,8 +3,8 @@ part of playing_cards;
 class Card {
   static var nextId = 0;
   var id;
-  var rank;
-  var suit;
+  Rank rank;
+  Suit suit;
   List<String> classList = ['card', 'deck', 'back'];
   bool isFaceUp;
   bool isPlayable;
@@ -13,5 +13,7 @@ class Card {
     isFaceUp = false;
     isPlayable = false;
   }
-  
+  String toString(){
+    return '${rank.letter} of ${suit.name}';
+  }
 }

@@ -31,9 +31,10 @@
 	import 'package:web_components/web_components.dart';
 	import 'model.dart';	
   import 'playing_cards.dart';
+  //Card currentCard;
 	class PlayingCardComponent extends WebComponent {
+	  
 	  PlayingCardComponent(){
-	    
 	  }
 	   ShadowRoot _shadowRoot;
 		Card card;
@@ -48,7 +49,14 @@
 	   return result;
 	  }
 	  void playCard(e){
-	    Future<String> 
+	    if(!card.isPlayable || !card.isFaceUp){
+	       print('not playable');
+	       return;
+	    }
+	    Future<Message> playStatus = app.playCard(card, 'south');
+	    playStatus.then((result){
+	     print('result is ${result.message}');
+	    });
       //if(!card.isPlayable){
         //return;
       //}

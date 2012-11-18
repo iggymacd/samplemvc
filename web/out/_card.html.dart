@@ -121,7 +121,6 @@ class PlayingCardComponent extends WebComponent {
   /** Original code from the component. */
   
   PlayingCardComponent(){
-    
   }
   ShadowRoot _shadowRoot;
   Card card;
@@ -136,7 +135,14 @@ class PlayingCardComponent extends WebComponent {
     return result;
   }
   void playCard(e){
-    Future<String>
+    if(!card.isPlayable || !card.isFaceUp){
+      print('not playable');
+      return;
+    }
+    Future<Message> playStatus = app.playCard(card, 'south');
+    playStatus.then((result){
+      print('result is ${result.message}');
+    });
     //if(!card.isPlayable){
       //return;
       //}

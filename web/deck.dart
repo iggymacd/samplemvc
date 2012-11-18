@@ -14,6 +14,7 @@ class Deck{
       card.isFaceUp = true;
       card.isPlayable = true;
       card.classList.add(card.suit.name);
+      //card.clickAction = 'playCard';
     }
     else if(name == 'east' || name == 'north' || name == 'west' ){
       card.isFaceUp = false;
