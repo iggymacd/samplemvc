@@ -19,10 +19,10 @@ App get app{
 
 
 
+List<String> positions = const ['south','west', 'north', 'east'];
 class App {
   List<Card> cards;
   Map<String,Deck> decks;
-  List<String> positions = ['south','west', 'north', 'east'];
   Timer timer;
   //Game currentGame;
   num dealer;
@@ -32,13 +32,17 @@ class App {
   App(){
     cards = createDeck();
     decks = new Map<String,Deck>();
-    decks['dealer'] = new Deck('dealer',shuffle(cards));
-    decks['north'] = new Deck('north', new List<Card>());
-    decks['south'] = new Deck('south', new List<Card>());
-    decks['east'] = new Deck('east', new List<Card>());
-    decks['west'] = new Deck('west', new List<Card>());
-    decks['discard'] = new Deck('discard', new List<Card>());
-    decks['round'] = new Deck('round', new List<Card>());
+    decks['dealer'] = new Deck('dealer',new Map<String,Card>());
+    List shuffledCards = shuffle(cards);
+    for(final card in shuffledCards){
+      decks['dealer'].addCard(card);
+    }
+    decks['north'] = new Deck('north', new Map<String,Card>());
+    decks['south'] = new Deck('south', new Map<String,Card>());
+    decks['east'] = new Deck('east', new Map<String,Card>());
+    decks['west'] = new Deck('west', new Map<String,Card>());
+    decks['discard'] = new Deck('discard', new Map<String,Card>());
+    decks['round'] = new Deck('round', new Map<String,Card>());
     dealer = new Random().nextInt(positions.length);
     nextToPlay = (dealer + 1) % 4;
     decks[positions[dealer]].isDealer = true; 
@@ -56,18 +60,20 @@ class App {
       //}
     });
     gamePort = spawnFunction(gameIsolate);
+    gamePort.send(new Message.register('app').toMap(), loggerPort.toSendPort());
+    gamePort.send(new Message.setDealer('app', positions[dealer]).toMap(), loggerPort.toSendPort());
   }
   
   
   void startGame(){
     num nextPlayer = dealer + 1;
-    List cardsToDeal = decks['dealer'].cards;
+    Map cardsToDeal = decks['dealer'].cards;
     num numberOfCards = cardsToDeal.length;
     //print('there are ${numberOfCards} cards to deal.');
     Card currentCard;
     //timer = new Timer.repeating(1000, (Timer timer) => runMonitor());
     for(num i = 0; i < numberOfCards ; i++){
-      Card currentCard = cardsToDeal.removeLast();
+      Card currentCard = cardsToDeal.remove((cardsToDeal.values as List).last.toString());
       num temp = nextPlayer % 4;
 //      new Timer(500, (Timer timer){
         decks[positions[temp]].addCard(currentCard);
@@ -78,7 +84,6 @@ class App {
         nextPlayer++;
       }
 
-    gamePort.send(new Message.register('app').toMap(), loggerPort.toSendPort());
     gamePort.send(new Message.start('app').toMap(), loggerPort.toSendPort());
     
   }

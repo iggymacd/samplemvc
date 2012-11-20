@@ -34,9 +34,6 @@
   //Card currentCard;
 	class PlayingCardComponent extends WebComponent {
 	  
-	  PlayingCardComponent(){
-	  }
-	   ShadowRoot _shadowRoot;
 		Card card;
     String get rank{
      return (card.isFaceUp ? card.rank.letter : '');

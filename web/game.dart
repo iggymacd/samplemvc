@@ -1,8 +1,9 @@
 
 part of model;
 
-SendPort logger;
-
+Map<String,SendPort> ports;
+String dealer;
+String nextToPlay;
 gameIsolate() {
   port.receive((msg, replyTo) {
     //print('doing some work ${app.cards.length}');
@@ -19,17 +20,34 @@ gameIsolate() {
 
 process(msg, sendPort) {
   switch (msg['type']) {
-    case 13:
+    case PLAY_CARD:
+      Message result;
+      if(msg['from'] == nextToPlay){
+        result = new Message('gameContoller','success');
+        sendPort.send(result.toMap());
+        ports['logger'].send(result.toMap());
+        int currentPosition = positions.indexOf(nextToPlay);
+        nextToPlay = positions[(currentPosition + 1) % 4];
+      }else{
+        result = new Message('gameContoller','failed');
+        sendPort.send(result.toMap());
+        ports['logger'].send(result.toMap());
+      }
+      break;
+    case SET_DEALER:
       //logger = sendPort;
-      logger.send(msg);
-      sendPort.send(msg);
+      dealer = msg['dealer'];
+      int dealerPosition = positions.indexOf(dealer);
+      nextToPlay = positions[(dealerPosition + 1) % 4];
+      ports['logger'].send(msg);
+      //sendPort.send(msg);
       break;
-    case 12:
-      logger = sendPort;
-      logger.send(msg);
+    case REGISTER:
+      ports['logger'] = sendPort;
+      ports['logger'].send(msg);
       break;
-    case 4 :
-      logger.send(msg);
+    case START :
+      ports['logger'].send(msg);
       break;
     default:
       //sendPort.send(msg);

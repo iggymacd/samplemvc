@@ -2,7 +2,7 @@ part of playing_cards;
 
 class Deck{
   String name;
-  List<Card> cards;
+  Map<String,Card> cards;
   Deck(this.name,this.cards);
   bool isDealer = false;
   bool isNextToPlay = false;
@@ -30,6 +30,9 @@ class Deck{
       card.isPlayable = false;
       card.classList.add('back');
     }
-    cards.add(card);
+    cards[card.toString()] = card;
+  }
+  void removeCard(String name){
+    cards.remove(name);
   }
 }

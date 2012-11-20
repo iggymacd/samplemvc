@@ -8,7 +8,6 @@
  */
 library analyzer;
 
-import 'dart:coreimpl';
 import 'package:html5lib/dom.dart';
 import 'package:html5lib/dom_parsing.dart';
 
@@ -78,9 +77,20 @@ class _Analyzer extends TreeVisitor {
       info = new ElementInfo(node, parent);
     }
 
+    visitElementInfo(info);
+
+    if (_parent == null) {
+      _fileInfo.bodyInfo = info;
+    }
+  }
+
+  void visitElementInfo(ElementInfo info) {
+    var node = info.node;
+
     if (node.id != '') info.identifier = '_${toCamelCase(node.id)}';
-    if (node.tagName == 'body') {
-      // TODO(jmesserly): too much knowledge of codegen here.
+    if (node.tagName == 'body' || (_currentInfo is ComponentInfo
+          && (_currentInfo as ComponentInfo).template == node)) {
+      info.isRoot = true;
       info.identifier = '_root';
     }
 
@@ -116,16 +126,44 @@ class _Analyzer extends TreeVisitor {
 
     _parent = savedParent;
 
-    if (_parent == null) {
-      _fileInfo.bodyInfo = info;
+    if (_needsIdentifier(info)) {
+      _ensureParentHasQuery(info);
+      if (info.identifier == null) {
+        var id = '__e-$_uniqueId';
+        info.identifier = toCamelCase(id);
+        // If it's not created in code, we'll query the element by it's id.
+        if (!info.createdInCode) node.attributes['id'] = id;
+        _uniqueId++;
+      }
     }
+  }
 
-    if (info.needsIdentifier && info.identifier == null) {
-      var id = '__e-$_uniqueId';
-      info.identifier = toCamelCase(id);
-      if (info.needsQuery) node.attributes['id'] = id;
-      _uniqueId++;
+  /**
+   * If this [info] is not created in code, ensure that whichever parent element
+   * is created in code has been marked appropriately, so we get an identifier.
+   */
+  static void _ensureParentHasQuery(ElementInfo info) {
+    if (info.isRoot || info.createdInCode) return;
+
+    for (var p = info.parent; p != null; p = p.parent) {
+      if (p.createdInCode) {
+        p.hasQuery = true;
+        return;
+      }
     }
+  }
+
+  /**
+   * Whether code generators need to create a field to store a reference to this
+   * element. This is typically true whenever we need to access the element
+   * (e.g. to add event listeners, update values on data-bound watchers, etc).
+   */
+  static bool _needsIdentifier(ElementInfo info) {
+    if (info.isRoot) return false;
+
+    return info.hasDataBinding || info.hasIfCondition || info.hasIterate
+       || info.hasQuery || info.component != null || info.values.length > 0 ||
+       info.events.length > 0;
   }
 
   void _bindExtends(ComponentInfo component) {
@@ -178,38 +216,54 @@ class _Analyzer extends TreeVisitor {
     // Note: we issue warnings instead of errors because the spirit of HTML and
     // Dart is to be forgiving.
     if (instantiate != null && iterate != null) {
-      messages.warning('<template> element cannot have iterate and instantiate '
+      messages.warning('template cannot have iterate and instantiate '
           'attributes', node.span, file: _fileInfo.path);
-      return null;
-    }
-
-    if (node.nodes.filter((n) => n is Element).length == 0) {
-      // Ignore templates with no children
-      // TODO(jmesserly): this is wrong when we want to support fragments
       return null;
     }
 
     if (instantiate != null) {
       if (instantiate.startsWith('if ')) {
-        return new TemplateInfo(node, _parent,
-            ifCondition: instantiate.substring(3));
+        var cond = instantiate.substring(3);
+
+        var result = new TemplateInfo(node, _parent, ifCondition: cond);
+        if (node.tagName == 'template') {
+          return node.nodes.length > 0 ? result : null;
+        }
+
+
+        // TODO(jmesserly): if-conditions in attributes require injecting a
+        // placeholder node, and a real node which is a clone. We should
+        // consider a design where we show/hide the node instead (with care
+        // taken not to evaluate hidden bindings). That is more along the lines
+        // of AngularJS, and would have a cleaner DOM. See issue #142.
+        var contentNode = node.clone();
+        // Clear out the original attributes. This is nice to have, but
+        // necessary for ID because of issue #141.
+        node.attributes.clear();
+        contentNode.nodes.addAll(node.nodes);
+
+        // Create a new ElementInfo that is a child of "result" -- the
+        // placeholder node. This will become result.contentInfo.
+        visitElementInfo(new ElementInfo(contentNode, result));
+        return result;
       }
 
       // TODO(jmesserly): we need better support for <template instantiate>
       // as it exists in MDV. Right now we ignore it, but we provide support for
       // data binding everywhere.
       if (instantiate != '') {
-        messages.warning('<template instantiate> must either have an empty '
-          'attribute or be of the form <template instantiate="if condition">.',
+        messages.warning('template instantiate must either have an empty '
+          'attribute or be of the form instantiate="if condition".',
           node.span, file: _fileInfo.path);
       }
     } else if (iterate != null) {
-      var match = const RegExp(r"(.*) in (.*)").firstMatch(iterate);
+      var match = new RegExp(r"(.*) in (.*)").firstMatch(iterate);
       if (match != null) {
+        if (node.nodes.length == 0) return null;
         return new TemplateInfo(node, _parent, loopVariable: match[1],
             loopItems: match[2]);
       }
-      messages.warning('<template> iterate must be of the form: '
+      messages.warning('template iterate must be of the form: '
           'iterate="variable in list", where "variable" is your variable name '
           'and "list" is the list of items.',
           node.span, file: _fileInfo.path);
@@ -220,103 +274,138 @@ class _Analyzer extends TreeVisitor {
   void visitAttribute(Element elem, ElementInfo elemInfo, String name,
                       String value) {
     if (name == 'data-value') {
-      _readDataValueAttribute(elem, elemInfo, value);
+      for (var item in value.split(',')) {
+        if (!_readDataValue(elemInfo, item)) return;
+      }
       return;
     } else if (name == 'data-action') {
-      _readDataActionAttribute(elem, elemInfo, value);
+      for (var item in value.split(',')) {
+        if (!_readDataAction(elemInfo, item)) return;
+      }
+      return;
+    } else if (name == 'data-bind') {
+      for (var item in value.split(',')) {
+        if (!_readDataBind(elemInfo, item)) return;
+      }
       return;
     }
 
-    if (name == 'data-bind') {
-      _readDataBindAttribute(elem, elemInfo, value);
+    AttributeInfo info;
+    if (name == 'data-style') {
+      info = new AttributeInfo([value], isStyle: true);
+    } else if (name == 'class') {
+      info = _readClassAttribute(elemInfo, value);
     } else {
-      if (name == 'class') {
-        elemInfo.attributes[name] = _readClassAttribute(elem, elemInfo, value);
-      } else {
-        // Strip off the outer {{ }}.
-        var match = const RegExp(r'^\s*{{(.*)}}\s*').firstMatch(value);
-        if (match == null) return;
-        value = match[1];
-
-        // Default to a 1-way binding for any other attribute.
-        elemInfo.attributes[name] = new AttributeInfo(value);
-      }
+      info = _readAttribute(elemInfo, name, value);
     }
-    elemInfo.hasDataBinding = true;
+
+    if (info != null) {
+      elemInfo.attributes[name] = info;
+      elemInfo.hasDataBinding = true;
+    }
   }
 
-  void _readDataValueAttribute(
-      Element elem, ElementInfo elemInfo, String value) {
+  bool _readDataValue(ElementInfo info, String value) {
     var colonIdx = value.indexOf(':');
     if (colonIdx <= 0) {
       messages.error('data-value attribute should be of the form '
-          'data-value="name:value"', elem.span, file: _fileInfo.path);
-      return;
+          'data-value="name:value" or data-value='
+          '"name1:value1,name2:value2,..." for multiple assigments.',
+          info.node.span, file: _fileInfo.path);
+      return false;
     }
     var name = value.substring(0, colonIdx);
     value = value.substring(colonIdx + 1);
 
-    elemInfo.values[name] = value;
+    info.values[name] = value;
+    return true;
   }
 
-  void _readDataActionAttribute(
-      Element elem, ElementInfo elemInfo, String value) {
-    // Bind each event, stopping if we hit an error.
-    for (var action in value.split(',')) {
-      if (!_readDataAction(elem, elemInfo, action)) return;
-    }
-  }
-
-  bool _readDataAction(Element elem, ElementInfo elemInfo, String value) {
+  bool _readDataAction(ElementInfo info, String value) {
     // Special data-attribute specifying an event listener.
     var colonIdx = value.indexOf(':');
     if (colonIdx <= 0) {
       messages.error('data-action attribute should be of the form '
           'data-action="eventName:action", or data-action='
           '"eventName1:action1,eventName2:action2,..." for multiple events.',
-          elem.span, file: _fileInfo.path);
+          info.node.span, file: _fileInfo.path);
       return false;
     }
 
     var name = value.substring(0, colonIdx);
     value = value.substring(colonIdx + 1);
-    _addEvent(elemInfo, name, (elem, args) => '${value}($args)');
+    _addEvent(info, name, (elem, args) => '${value}($args)');
     return true;
   }
 
-  void _addEvent(ElementInfo elemInfo, String name, ActionDefinition action) {
-    var events = elemInfo.events.putIfAbsent(name, () => <EventInfo>[]);
+  void _addEvent(ElementInfo info, String name, ActionDefinition action) {
+    var events = info.events.putIfAbsent(name, () => <EventInfo>[]);
     events.add(new EventInfo(name, action));
   }
 
-  AttributeInfo _readDataBindAttribute(
-      Element elem, ElementInfo elemInfo, String value) {
+  bool _readDataBind(ElementInfo info, String value) {
     var colonIdx = value.indexOf(':');
     if (colonIdx <= 0) {
       messages.error('data-bind attribute should be of the form '
-          'data-bind="name:value"', elem.span, file: _fileInfo.path);
-      return null;
+          'data-bind="name:value"', info.node.span, file: _fileInfo.path);
+      return false;
     }
 
-    var attrInfo;
+    var elem = info.node;
     var name = value.substring(0, colonIdx);
     value = value.substring(colonIdx + 1);
     var isInput = elem.tagName == 'input';
+    var isTextArea = elem.tagName == 'textarea';
+    var isSelect = elem.tagName == 'select';
     // Special two-way binding logic for input elements.
     if (isInput && name == 'checked') {
-      attrInfo = new AttributeInfo(value);
       // Assume [value] is a field or property setter.
-      _addEvent(elemInfo, 'click', (elem, args) => '$value = $elem.checked');
-    } else if (isInput && name == 'value') {
-      attrInfo = new AttributeInfo(value);
-      // Assume [value] is a field or property setter.
-      _addEvent(elemInfo, 'input', (elem, args) => '$value = $elem.value');
+      info.attributes[name] = new AttributeInfo([value]);
+      _addEvent(info, 'click', (e, args) => '$value = $e.checked');
+    } else if (isSelect && (name == 'selectedIndex' || name == 'value')) {
+      info.attributes[name] = new AttributeInfo([value]);
+      _addEvent(info, 'change', (e, args) => '$value = $e.$name');
+    } else if (name == 'value' && (isInput || isTextArea)) {
+      info.attributes[name] = new AttributeInfo([value]);
+      _addEvent(info, 'input', (e, args) => '$value = $e.value');
     } else {
-      messages.error('Unknown data-bind attribute: ${elem.tagName} - ${name}',
-          elem.span, file: _fileInfo.path);
-      return null;
+      messages.error('Unknown data-bind attribute: ${elem.tagName} - $name',
+          info.node.span, file: _fileInfo.path);
+      return false;
     }
-    elemInfo.attributes[name] = attrInfo;
+
+    info.hasDataBinding = true;
+    return true;
+  }
+
+  /**
+   * Data binding support in attributes. Supports multiple bindings.
+   * This is can be used for any attribute, but a typical use case would be
+   * URLs, for example:
+   *
+   *       href="#{item.href}"
+   */
+  AttributeInfo _readAttribute(ElementInfo info, String name, String value) {
+    var parser = new BindingParser(value);
+    if (!parser.moveNext()) return null;
+
+    // TODO(jmesserly): this seems like a common pattern.
+    var bindings = <String>[];
+    var content = <String>[];
+    do {
+      bindings.add(parser.binding);
+      content.add(parser.textContent);
+    } while (parser.moveNext());
+    content.add(parser.textContent);
+
+    // Use a simple attriubte binding if we can.
+    // This kind of binding works for non-String values.
+    if (bindings.length == 1 && content[0] == '' && content[1] == '') {
+      return new AttributeInfo(bindings);
+    }
+
+    // Otherwise do a text attribute that performs string interpolation.
+    return new AttributeInfo(bindings, textContent: content);
   }
 
   /**
@@ -326,66 +415,52 @@ class _Analyzer extends TreeVisitor {
    *
    * Returns list of databound expressions (e.g, class1, class3 and class4).
    */
-  AttributeInfo _readClassAttribute(
-      Element elem, ElementInfo elemInfo, String value) {
+  AttributeInfo _readClassAttribute(ElementInfo info, String value) {
+    var parser = new BindingParser(value);
+    if (!parser.moveNext()) return null;
 
     var bindings = <String>[];
-    if (value != null) {
-      var parser = new BindingParser(value);
-      var content = new StringBuffer();
-      while (parser.moveNext()) {
-        content.add(parser.textContent);
-        bindings.add(parser.binding);
-      }
+    var content = new StringBuffer();
+    do {
       content.add(parser.textContent);
+      bindings.add(parser.binding);
+    } while (parser.moveNext());
+    content.add(parser.textContent);
 
-      // Update class attributes to only have non-databound class names for
-      // attributes for the HTML.
-      elem.attributes['class'] = content.toString();
-    }
+    // Update class attributes to only have non-databound class names for
+    // attributes for the HTML.
+    info.node.attributes['class'] = content.toString();
 
-    return new AttributeInfo.forClass(bindings);
+    return new AttributeInfo(bindings, isClass: true);
   }
 
   void visitText(Text text) {
-    var info = new ElementInfo(text, _parent);
-
     var parser = new BindingParser(text.value);
+    // nothing to do if there are no bindings.
     if (!parser.moveNext()) return;
 
-    if (info.parent.contentBinding != null) {
-      // This is issue #133.
-      messages.error('multiple text bindings in a simple element are not yet '
-          'supported', text.span, file: _fileInfo.path);
-      return;
-    }
+    _parent.hasDataBinding = true;
 
-    var parentElem = text.parent;
-    info.parent.hasDataBinding = true;
-    info.hasDataBinding = true;
-
-    // Match all bindings.
-    var content = new StringBuffer();
-    var bindings = [];
+    // We split [text] so that each binding has its own text node.
+    var node = text.parent;
     do {
-      bindings.add(parser.binding);
-      content.add(escapeDartString(parser.textContent));
-
-      // Note: bindings themselves are Dart expressions (currently--see #65).
-      // So we should not need to further escape them.
-      content.add("\${${parser.binding}}");
+      _addRawTextContent(parser.textContent, text);
+      var placeholder = new Text('');
+      var id = '_binding$_uniqueId';
+      var info = new TextInfo(placeholder, _parent, parser.binding, id);
+      _uniqueId++;
+      text.parent.insertBefore(placeholder, text);
     } while (parser.moveNext());
+    _addRawTextContent(parser.textContent, text);
+    text.remove();
+  }
 
-    content.add(escapeDartString(parser.textContent));
-
-    if (bindings.length == 1) {
-      info.contentBinding = bindings[0];
-    } else {
-      // TODO(jmesserly): we could probably do something faster than a list
-      // for watching on multiple bindings. But it seems easy to get working.
-      info.contentBinding = '[${Strings.join(bindings, ", ")}]';
+  _addRawTextContent(String content, Text location) {
+    if (content != '') {
+      var node = new Text(content);
+      new TextInfo(node, _parent);
+      location.parent.insertBefore(node, location);
     }
-    info.contentExpression = "'$content'";
   }
 }
 
@@ -430,7 +505,6 @@ class _ElementLoader extends TreeVisitor {
       return;
     }
 
-
     var path = _fileInfo.path.directoryPath.join(new Path(href));
     _fileInfo.componentLinks.add(path);
   }
@@ -445,25 +519,34 @@ class _ElementLoader extends TreeVisitor {
       return;
     }
 
-    var component = new ComponentInfo(node, _fileInfo);
-    if (component.constructor == null) {
-      messages.error('Missing the class name associated with this component. '
-          'Please add an attribute of the form  \'constructor="ClassName"\'.',
-          node.span, file: _fileInfo.path);
-      return;
-    }
+    var tagName = node.attributes['name'];
+    var extendsTag = node.attributes['extends'];
+    var constructor = node.attributes['constructor'];
+    var templateNodes = node.nodes.filter((n) => n.tagName == 'template');
 
-    if (component.tagName == null) {
+    if (tagName == null) {
       messages.error('Missing tag name of the component. Please include an '
           'attribute like \'name="x-your-tag-name"\'.',
           node.span, file: _fileInfo.path);
       return;
     }
 
-    if (component.template == null) {
+    var template = null;
+    if (templateNodes.length == 1) {
+      template = templateNodes[0];
+    } else {
       messages.warning('an <element> should have exactly one <template> child.',
           node.span, file: _fileInfo.path);
     }
+
+    if (constructor == null) {
+      var name = tagName;
+      if (name.startsWith('x-')) name = name.substring(2);
+      constructor = toCamelCase(name, startUppercase: true);
+    }
+
+    var component = new ComponentInfo(node, _fileInfo, tagName, extendsTag,
+        constructor, template);
 
     _fileInfo.declaredComponents.add(component);
 
