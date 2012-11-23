@@ -5,10 +5,13 @@ Map<String,SendPort> ports;
 String dealer;
 String nextToPlay;
 gameIsolate() {
+  ports = new Map<String,SendPort>();
   port.receive((msg, replyTo) {
     //print('doing some work ${app.cards.length}');
     if (replyTo != null){
       if(msg is Map){
+//      ports['logger'] = sendPort;
+//      ports['logger'].send(msg);
         process(msg, replyTo);
       }else{
         //replyTo.send(msg);
@@ -43,7 +46,8 @@ process(msg, sendPort) {
       //sendPort.send(msg);
       break;
     case REGISTER:
-      ports['logger'] = sendPort;
+      String registerMessage = msg['message'];
+      ports[registerMessage] = sendPort;
       ports['logger'].send(msg);
       break;
     case START :

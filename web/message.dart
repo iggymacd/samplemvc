@@ -44,8 +44,8 @@ class Message {
   : _received = new Date.now(){ _type = WAITING;}
   Message.uiReady(this._from)
   : _received = new Date.now(){ _type = UI_READY;}
-  Message.register(this._from)
-  : _received = new Date.now(){ _type = REGISTER;}
+  Message.register(this._from, this._message)
+  : _received = new Date.now(){ _type = REGISTER;print('Message is $_message');}
   Message.playCard(this._from, this._card)
   : _received = new Date.now(){ _type = PLAY_CARD;}
   Message.setDealer(this._from, this._dealer)
@@ -73,7 +73,7 @@ class Message {
     map["received"] = _received.toString();
     map["type"] = _type;
     map["typeName"] = _typeName[_type];
-    if (_type == MESSAGE) map["message"] = _message;
+    if (_type == MESSAGE || _type == REGISTER) map["message"] = _message;
     if (_type == PLAY_CARD) map["card"] = _card.toMap();
     if (_type == SET_DEALER) map["dealer"] = _dealer;
     //map["number"] = _messageNumber;

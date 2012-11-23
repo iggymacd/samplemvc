@@ -29,6 +29,7 @@ class App {
   num nextToPlay;
   SendPort gamePort;
   ReceivePort loggerPort;
+  ReceivePort controllerPort;
   App(){
     cards = createDeck();
     decks = new Map<String,Deck>();
@@ -47,8 +48,8 @@ class App {
     nextToPlay = (dealer + 1) % 4;
     decks[positions[dealer]].isDealer = true; 
     decks[positions[nextToPlay]].isNextToPlay = true;
-    //currentGame = new Game();
-    //cards = shuffle(cards);
+//    //currentGame = new Game();
+//    //cards = shuffle(cards);
     loggerPort = new ReceivePort();
     loggerPort.receive((Map msg, _) {
       //if (msg.type == Message.MESSAGE) {
@@ -59,9 +60,19 @@ class App {
         //receiver.close();
       //}
     });
+//    controllerPort = new ReceivePort();
+//    controllerPort.receive((Map msg, _) {
+//      //if (msg.type == Message.MESSAGE) {
+//        //print('shutting down');
+//        print(msg['from']);
+//        //print(msg.message);
+//        print(msg);
+//        //receiver.close();
+//      //}
+//    });
     gamePort = spawnFunction(gameIsolate);
-    gamePort.send(new Message.register('app').toMap(), loggerPort.toSendPort());
-    gamePort.send(new Message.setDealer('app', positions[dealer]).toMap(), loggerPort.toSendPort());
+    gamePort.send(new Message.register('app','logger').toMap(), loggerPort.toSendPort());
+    //gamePort.send(new Message.setDealer('app', positions[dealer]).toMap(), loggerPort.toSendPort());
   }
   
   
@@ -84,7 +95,7 @@ class App {
         nextPlayer++;
       }
 
-    gamePort.send(new Message.start('app').toMap(), loggerPort.toSendPort());
+    //gamePort.send(new Message.start('app').toMap(), loggerPort.toSendPort());
     
   }
   

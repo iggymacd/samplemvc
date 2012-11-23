@@ -1,6 +1,9 @@
-name:  samplemvc
+name:  CardGame
 description:  A sample application
 
+#dependencies:
+#  js: any
+#  unittest: { sdk: unittest }
 version: 0.0.2
 dependencies:
   web_components: any
