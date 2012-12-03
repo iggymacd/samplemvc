@@ -17,8 +17,6 @@ void cleanHtmlNodes(info) {
   new _HtmlCleaner().visit(info);
 }
 
-// TODO(jmesserly): see if we can drive this entirely off info, so it doesn't
-// duplicate parsing elsewhere in analyzer.
 /** Remove all MDV attributes; post-analysis these attributes are not needed. */
 class _HtmlCleaner extends InfoVisitor {
 
@@ -30,7 +28,7 @@ class _HtmlCleaner extends InfoVisitor {
 
   void visitElementInfo(ElementInfo info) {
     var node = info.node;
-    if (info.isIterateOrIf) {
+    if (info.hasIterate || info.hasIfCondition) {
       // Remove children but not template node itself
       node.nodes.clear();
 
@@ -41,38 +39,23 @@ class _HtmlCleaner extends InfoVisitor {
       if (info.isTemplateElement || info.hasIfCondition) {
         node.attributes['style'] = 'display:none';
       }
-    }
-
-    node.attributes.forEach((name, value) {
-      visitAttribute(node, name, value);
-    });
-
-    if (info.contentBinding != null) {
-      // TODO(jmesserly, sigmundch): this looks weird, see issue #133.
-      assert(node is Text);
+    } else if (info.childrenCreatedInCode && node.parent != null) {
+      // clear the children from info's parent perspective, but keep it in the
+      // node so that the emitter can use them when generating code for [info].
+      var clone = node.clone();
+      node.parent.insertBefore(clone, node);
       node.remove();
-      return;
     }
+
+    for (var name in info.attributes.keys) {
+      if (name != 'class') node.attributes.remove(name);
+    }
+
+    const [
+      'data-action', 'data-bind', 'data-value',
+      'instantiate', 'iterate', 'template'
+    ].forEach(node.attributes.remove);
 
     super.visitElementInfo(info);
-  }
-
-  void visitAttribute(Element node, String name, String value) {
-    switch (name) {
-      // Remove MDV attributes now that we've processed them.
-      case 'data-action':
-      case 'data-bind':
-      case 'data-value':
-      case 'instantiate':
-      case 'iterate':
-      case 'template':
-        node.attributes.remove(name);
-        break;
-      default:
-        // Remove any attribute computed as a MDV expression.
-        if (value.contains("{{")) {
-          node.attributes.remove(name);
-        }
-    }
   }
 }

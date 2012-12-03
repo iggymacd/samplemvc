@@ -14,12 +14,16 @@ const UI_READY = 11;
 const REGISTER = 12;
 const PLAY_CARD = 13;
 const SET_DEALER = 14;
+const YOUR_TURN = 15;
 class Message {
+
   static final List<String> _typeName =
       const [ "join", "message", "leave", "timeout", "start", "stop", 
               "starting", "stopping", "waiting", "started", "profile", 
-              "uiReady", "register", "playCard", "setDealer"];
+              "uiReady", "register", "playCard", "setDealer", "yourTurn"];
 
+  Message.yourTurn(this._nextToPlay)
+  : _received = new Date.now(){ _type = YOUR_TURN;}
   Message.start(this._from)
   : _received = new Date.now(){ _type = START;}
   Message.starting(this._from)
@@ -65,6 +69,7 @@ class Message {
   String get message => _message;
   int get type => _type;
   String get dealer => _dealer;
+  String get nextToPlay => _nextToPlay;
   //void set messageNumber(int n) => _messageNumber = n;
 
   Map toMap() {
@@ -76,6 +81,7 @@ class Message {
     if (_type == MESSAGE || _type == REGISTER) map["message"] = _message;
     if (_type == PLAY_CARD) map["card"] = _card.toMap();
     if (_type == SET_DEALER) map["dealer"] = _dealer;
+    if (_type == YOUR_TURN) map["nextToPlay"] = _nextToPlay;
     //map["number"] = _messageNumber;
     return map;
   }
@@ -96,6 +102,7 @@ class Message {
   String _message;
   String _dealer;
   Card _card;
+  String _nextToPlay;
   //String _handle;
   //int _messageNumber;
 }

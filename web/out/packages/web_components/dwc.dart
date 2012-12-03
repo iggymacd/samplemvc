@@ -5,6 +5,8 @@
 /** The entry point to the compiler. Used to implement `bin/dwc.dart`. */
 library dwc;
 
+import 'dart:io';
+import 'package:logging/logging.dart' show Level;
 import 'src/compiler.dart';
 import 'src/file_system.dart';
 import 'src/file_system/console.dart';
@@ -12,7 +14,6 @@ import 'src/file_system/path.dart' as fs;
 import 'src/messages.dart';
 import 'src/options.dart';
 import 'src/utils.dart';
-import 'dart:io';
 
 FileSystem fileSystem;
 
@@ -20,8 +21,21 @@ void main() {
   run(new Options().arguments);
 }
 
+/** Contains the result of a compiler run. */
+class CompilerResult {
+  final bool success;
+  final List<String> outputs;
+  final List<String> messages;
+  CompilerResult(this.success, this.outputs, this.messages);
+}
+
+/**
+ * Runs the web components compiler with the command-line options in [args].
+ * See [CompilerOptions] for the definition of valid arguments.
+ */
 // TODO(jmesserly): fix this to return a proper exit code
-Future run(List<String> args) {
+// TODO(justinfagnani): return messages in the result
+Future<CompilerResult> run(List<String> args) {
   var options = CompilerOptions.parse(args);
   if (options == null) return new Future.immediate(null);
 
@@ -31,17 +45,23 @@ Future run(List<String> args) {
   return asyncTime('Total time spent on ${options.inputFile}', () {
     var currentDir = new Directory.current().path;
     var compiler = new Compiler(fileSystem, options, currentDir);
-    return compiler.run().chain((_) {
-      var entryPoint = null;
-      // Write out the code associated with each source file.
-      for (var file in compiler.output) {
-        writeFile(file.path, file.contents, options.clean);
-        if (file.path.filename.endsWith('_bootstrap.dart')) {
-          entryPoint = file.path;
+    return compiler.run()
+      .chain((_) {
+        var entryPoint = null;
+        // Write out the code associated with each source file.
+        for (var file in compiler.output) {
+          writeFile(file.path, file.contents, options.clean);
+          if (file.path.filename.endsWith('_bootstrap.dart')) {
+            entryPoint = file.path;
+          }
         }
-      }
-      return symlinkPubPackages(entryPoint, options);
-    }).chain((_) => fileSystem.flush());
+        return symlinkPubPackages(entryPoint, options);
+      })
+      .chain((_) => fileSystem.flush())
+      .transform((_) => new CompilerResult(
+            !messages.messages.some((m) => m.level == Level.SEVERE),
+            compiler.output.map((f) => f.path.toString()),
+            messages.messages.map((m) => m.toString())));
   }, printTime: true);
 }
 
@@ -99,15 +119,32 @@ Future symlinkPubPackages(fs.Path outputFile, CompilerOptions options) {
   // TODO(sigmund): once it's possible in dart:io, we just want to use a full
   // path, but not necessarily resolve symlinks.
   var from = new File.fromPath(fromPath).fullPathSync().toString();
-  var to = toPath.toString();
+  var to = toPath.toNativePath().toString();
+  return createSymlink(from, to);
+}
 
+
+// TODO(jmesserly): this code was taken from Pub's io library.
+// Added error handling and don't return the file result, to match the code
+// we had previously. Also "from" and "to" only accept strings. And inlined
+// the relevant parts of runProcess. Note that it uses "cmd" to get the path
+// on Windows.
+/**
+ * Creates a new symlink that creates an alias from [from] to [to], both of
+ * which can be a [String], [File], or [Directory]. Returns a [Future] which
+ * completes to the symlink file (i.e. [to]).
+ */
+Future createSymlink(String from, String to) {
   var command = 'ln';
   var args = ['-s', from, to];
 
   if (Platform.operatingSystem == 'windows') {
-    // This uses the same technique as 'pub' to create symlinks in windows,
-    // which only works on Vista or later. 
-    command = 'mklink';
+    // Call mklink on Windows to create an NTFS junction point. Only works on
+    // Vista or later. (Junction points are available earlier, but the "mklink"
+    // command is not.) I'm using a junction point (/j) here instead of a soft
+    // link (/d) because the latter requires some privilege shenanigans that
+    // I'm not sure how to specify from the command line.
+    command = 'cmd';
     args = ['/c', 'mklink', '/j', to, from];
   }
 
@@ -117,10 +154,11 @@ Future symlinkPubPackages(fs.Path outputFile, CompilerOptions options) {
                     'subprocess stderr:\n${result.stderr}';
       messages.error(
         'unable to create symlink\n from: $from\n to:$to\n$details', null);
-    } 
+    }
     return null;
   });
 }
+
 
 // TODO(sigmund): this conversion from dart:io paths to internal paths should
 // go away when dartbug.com/5818 is fixed.

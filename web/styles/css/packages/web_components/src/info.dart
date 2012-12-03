@@ -9,7 +9,6 @@
 library info;
 
 import 'dart:collection' show SplayTreeMap;
-import 'dart:coreimpl';
 import 'dart:uri';
 
 import 'package:html5lib/dom.dart';
@@ -18,7 +17,6 @@ import 'file_system/path.dart';
 import 'files.dart';
 import 'messages.dart';
 import 'utils.dart';
-
 
 /** Information about input, base, and output path locations. */
 class PathInfo {
@@ -34,24 +32,50 @@ class PathInfo {
   /** Base path where all output is generated. */
   final Path _outputDir;
 
+  /** Whether to add prefixes and to output file names. */
+  final bool _mangleFilenames;
+  
   /** Default prefix added to all filenames. */
   static const String _DEFAULT_PREFIX = '_';
 
-  PathInfo(this._baseDir, this._outputDir);
+  PathInfo(Path baseDir, Path outputDir, [bool forceMangle = false])
+      : _baseDir = baseDir,
+        _outputDir = outputDir,
+        _mangleFilenames = forceMangle || (baseDir == outputDir);
 
+  /** Add a prefix and [suffix] if [_mangleFilenames] is true */
+  String mangle(String name, String suffix, [bool forceSuffix = false]) =>
+    _mangleFilenames ? "$_DEFAULT_PREFIX$name$suffix"
+        : (forceSuffix ? "$name$suffix" : name);
+
+  /** 
+   * Checks if [input] is valid. It must be in [_baseDir] and must not be in
+   * the [_outputDir].
+   */
+  bool checkInputPath(Path input) {
+    if (_mangleFilenames) return true;
+    var canonicalized = input.canonicalize().toString();
+    var valid = !canonicalized.startsWith(_outputDir.toString())
+        && canonicalized.startsWith(_baseDir.toString());
+    if (!valid) {
+      messages.error(
+          "The file ${input} cannot be processed. "
+          "Files must be in ${_baseDir} and must not be in ${_outputDir}.", 
+          null, file: input);
+    }
+    return valid;
+  }
+  
   /**
    * The path to the output file corresponding to [input], by adding
    * [_DEFAULT_PREFIX] and a [suffix] to its file name.
    */
-  Path outputPath(Path input, String suffix) {
-    var newName = '$_DEFAULT_PREFIX${input.filename}$suffix';
-    return _outputDirPath(input).append(newName);
-  }
+  Path outputPath(Path input, String suffix) =>
+      _outputDirPath(input).append(mangle(input.filename, suffix));
 
   /** The path to the output file corresponding to [info]. */
-  Path outputLibraryPath(LibraryInfo info) {
-    return _outputDirPath(info.inputPath).append(info.outputFilename);
-  }
+  Path outputLibraryPath(LibraryInfo info) =>
+      _outputDirPath(info.inputPath).append(info._getOutputFilename(mangle));
 
   /** The corresponding output directory for [input]'s directory. */
   Path _outputDirPath(Path input) {
@@ -69,10 +93,10 @@ class PathInfo {
    * [target] from the output library of [src]. In other words, a path to import
    * or export `target.outputFilename` from `src.outputFilename`.
    */
-  static Path relativePath(LibraryInfo src, LibraryInfo target) {
+  Path relativePath(LibraryInfo src, LibraryInfo target) {
     var srcDir = src.inputPath.directoryPath;
     var relDir = target.inputPath.directoryPath.relativeTo(srcDir);
-    return relDir.append(target.outputFilename).canonicalize();
+    return relDir.append(target._getOutputFilename(mangle)).canonicalize();
   }
 
   /**
@@ -81,7 +105,7 @@ class PathInfo {
    */
   Path relativePathFromOutputDir(LibraryInfo info) {
     var relativeDir = info.inputPath.directoryPath.relativeTo(_baseDir);
-    return relativeDir.append(info.outputFilename).canonicalize();
+    return relativeDir.append(info._getOutputFilename(mangle)).canonicalize();
   }
 
   /**
@@ -101,6 +125,13 @@ class PathInfo {
     return pathToTarget.relativeTo(outputLibraryDir).canonicalize().toString();
   }
 }
+
+/** 
+ * Returns a "mangled" name, with a prefix and [suffix] depending on the
+ * compiler's settings. [forceSuffix] causes [suffix] to be appended even if
+ * the compiler is not mangling names.
+ */
+typedef String NameMangler(String name, String suffix, [bool forceSuffix]);
 
 /**
  * Information for any library-like input. We consider each HTML file a library,
@@ -137,7 +168,7 @@ abstract class LibraryInfo {
    * Name of the file that will hold any generated Dart code for this library
    * unit.
    */
-  String get outputFilename;
+  String _getOutputFilename(NameMangler mangle);
 
   /**
    * Components used within this library unit. For [FileInfo] these are
@@ -167,7 +198,8 @@ class FileInfo extends LibraryInfo {
   Path get inputPath => externalFile != null ? externalFile : path;
 
   /** Name of the file that will hold any generated Dart code. */
-  String get outputFilename => '_${inputPath.filename}.dart';
+  String _getOutputFilename(NameMangler mangle) =>
+      mangle(inputPath.filename, '.dart', inputPath.extension == 'html');
 
   /**
    * All custom element definitions in this file. This may contain duplicates.
@@ -243,34 +275,25 @@ class ComponentInfo extends LibraryInfo {
    * components could be defined inline within the HTML file, so we return a
    * unique file name for each component.
    */
-  String get outputFilename {
-    if (externalFile != null) return '_${externalFile.filename}.dart';
+  String _getOutputFilename(NameMangler mangle) {
+    if (externalFile != null) return mangle(externalFile.filename, '.dart');
     var prefix = declaringFile.path.filename;
     if (declaringFile.declaredComponents.length == 1
         && !declaringFile.codeAttached) {
-      return '_$prefix.dart';
+      return mangle(prefix, '.dart', true);
     }
     var componentSegment = tagName.toLowerCase().replaceAll('-', '_');
-    return '_$prefix.$componentSegment.dart';
+    return mangle('${prefix}_$componentSegment', '.dart', true);
   }
-
+  
   /**
    * True if [tagName] was defined by more than one component. If this happened
    * we will skip over the component.
    */
   bool hasConflict = false;
 
-  ComponentInfo(Element element, this.declaringFile)
-    : element = element,
-      tagName = element.attributes['name'],
-      extendsTag = element.attributes['extends'],
-      constructor = element.attributes['constructor'],
-      template = _getTemplate(element);
-
-  static _getTemplate(element) {
-    List template = element.nodes.filter((n) => n.tagName == 'template');
-    return template.length == 1 ? template[0] : null;
-  }
+  ComponentInfo(this.element, this.declaringFile, this.tagName, this.extendsTag,
+      this.constructor, this.template);
 }
 
 /** Base tree visitor for the Analyzer infos. */
@@ -281,6 +304,8 @@ class InfoVisitor {
       return visitTemplateInfo(info);
     } else if (info is ElementInfo) {
       return visitElementInfo(info);
+    } else if (info is TextInfo) {
+      return visitTextInfo(info);
     } else if (info is ComponentInfo) {
       return visitComponentInfo(info);
     } else if (info is FileInfo) {
@@ -303,51 +328,51 @@ class InfoVisitor {
 
   visitElementInfo(ElementInfo info) => visitChildren(info);
 
+  visitTextInfo(TextInfo info) {}
+
   visitComponentInfo(ComponentInfo info) => visit(info.elemInfo);
 }
 
-// TODO(terry): ElementInfo should associated with elements, rather than
-// nodes. There are cases with the node is pointing to a text node, maybe
-// have a 'NodeInfo' rather than an 'ElementInfo'.
-/** Information extracted for each node in a template. */
-class ElementInfo {
-  // TODO(jmesserly): ideally we should only create Infos for things that need
-  // an identifier. So this would always be non-null. That is not the case yet.
-  /**
-   * The name used to refer to this element in Dart code.
-   * Depending on the context, this can be a variable or a field.
-   */
-  String identifier;
+/** Common base class for [ElementInfo] and [TextInfo]. */
+abstract class NodeInfo<T extends Node> {
+
+  /** DOM node associated with this NodeInfo. */
+  final T node;
 
   /** Info for the nearest enclosing element, iterator, or conditional. */
   final ElementInfo parent;
 
-  // TODO(jmesserly): make childen work like DOM children collection, so that
-  // adding/removing a node updates the parent pointer.
-  final List<ElementInfo> children = [];
-
-  // TODO(terry): ElementInfo Should associated with elements, rather than
-  // nodes. In this case, we are creating a text node, so we should maybe
-  // have a 'NodeInfo' rather than an 'ElementInfo' in that case.
-  /** DOM node associated with this ElementInfo. */
-  final Node node;
-
+  // TODO(jmesserly): ideally we should only create Infos for things that need
+  // an identifier. So this would always be non-null. That is not the case yet.
   /**
-   * Whether code generators need to create a field to store a reference to this
-   * element. This is typically true whenever we need to access the element
-   * (e.g. to add event listeners, update values on data-bound watchers, etc).
+   * The name used to refer to this node in Dart code.
+   * Depending on the context, this can be a variable or a field.
    */
-  bool get needsIdentifier => hasDataBinding || hasIfCondition || hasIterate
-      || component != null || values.length > 0 || events.length > 0
-      || !needsQuery;
+  String identifier;
 
   // TODO(jmesserly): it'd be nice if we didn't need to query.
   /**
-   * True if we need to query to get this node. Otherwise, we'll create it
-   * from code. We always query except for "if" and "iterate" templates where
-   * the children are constructed directly.
+   * Whether the node represented by this info will be constructed from code.
+   * If true, its identifier is initialized programatically, otherwise, its
+   * identifier is initialized using a query.
+   * The compiler currently creates in code text nodes with data-bindings,
+   * siblings of text nodes with data-bindings, and immediate children of loops
+   * and conditionals.
    */
-  bool get needsQuery => parent == null || !parent.isIterateOrIf;
+  bool get createdInCode;
+
+  NodeInfo(this.node, this.parent, [this.identifier]) {
+    if (parent != null) parent.children.add(this);
+  }
+}
+
+/** Information extracted for each node in a template. */
+class ElementInfo extends NodeInfo<Element> {
+  // TODO(jmesserly): make childen work like DOM children collection, so that
+  // adding/removing a node updates the parent pointer.
+  final List<NodeInfo> children = [];
+
+  bool get createdInCode => parent != null && parent.childrenCreatedInCode;
 
   /**
    * If this element is a web component instantiation (e.g. `<x-foo>`), this
@@ -358,27 +383,23 @@ class ElementInfo {
   /** Whether the element contains data bindings. */
   bool hasDataBinding = false;
 
-  // TODO(jmesserly): this doesn't work with child elements (issue #133).
-  /** Data-bound expression used in the contents of the node. */
-  String contentBinding;
+  /** Whether any child of this node is created in code. */
+  bool childrenCreatedInCode = false;
+
+  /** Whether this node represents "body" or the shadow root of a component. */
+  bool isRoot = false;
 
   /**
-   * Expression that returns the contents of the node (given it has a
-   * data-bound expression in it).
+   * True if some descendant needs to query starting from this element.
+   * If this is true, we will generate a variable for this node.
    */
-  // TODO(terry,sigmund): support more than 1 expression in the contents.
-  String contentExpression;
-
-  /** Generated watcher disposer that watchs for the content expression. */
-  // TODO(sigmund): move somewhere else?
-  String stopperName;
+  bool hasQuery = false;
 
   // Note: we're using sorted maps so items are enumerated in a consistent order
   // between runs, resulting in less "diff" in the generated code.
   // TODO(jmesserly): An alternative approach would be to use LinkedHashMap to
   // preserve the order of the input, but we'd need to be careful about our tree
   // traversal order.
-
   /** Collected information for attributes, if any. */
   final Map<String, AttributeInfo> attributes =
       new SplayTreeMap<String, AttributeInfo>();
@@ -396,26 +417,39 @@ class ElementInfo {
   /** Whether the template element has an `instantiate="if ..."` conditional. */
   bool get hasIfCondition => false;
 
-  bool get isIterateOrIf => hasIterate || hasIfCondition;
-
   bool get isTemplateElement => false;
 
-  ElementInfo(this.node, this.parent) {
-    if (parent != null) parent.children.add(this);
-  }
+  ElementInfo(Element node, ElementInfo parent) : super(node, parent);
 
   String toString() => '#<ElementInfo '
       'identifier: $identifier, '
-      'needsIdentifier: $needsIdentifier, '
-      'needsQuery: $needsQuery, '
+      'createdInCode: $createdInCode, '
       'component: $component, '
       'hasIterate: $hasIterate, '
       'hasIfCondition: $hasIfCondition, '
       'hasDataBinding: $hasDataBinding, '
-      'contentBinding: $contentBinding, '
-      'contentExpression: $contentExpression, '
+      'hasQuery: $hasQuery, '
       'attributes: $attributes, '
       'events: $events>';
+}
+
+/**
+ * Information for a single text node created programatically. We create a
+ * [TextInfo] for data bindings that occur in content nodes, and for each
+ * text node that is created programatically in code. Note that the analyzer
+ * splits HTML text nodes, so that each data-binding has its own node (and
+ * [TextInfo]).
+ */
+class TextInfo extends NodeInfo<Text> {
+  /** The data-bound Dart expression. */
+  final String binding;
+
+  bool get createdInCode => true;
+
+  TextInfo(Text node, ElementInfo parent, [this.binding, String identifier])
+      : super(node, parent, identifier) {
+    parent.childrenCreatedInCode = true;
+  }
 }
 
 /** Information extracted for each attribute in an element. */
@@ -425,28 +459,57 @@ class AttributeInfo {
    * Whether this is a `class` attribute. In which case more than one binding
    * is allowed (one per class).
    */
-  bool isClass = false;
+  final bool isClass;
 
   /**
-   * A value that will be monitored for changes. All attributes, except `class`,
-   * have a single bound value.
+   * Whether this is a 'data-style' attribute.
+   */
+  final bool isStyle;
+
+  /** All bound values that would be monitored for changes. */
+  final List<String> bindings;
+
+  /**
+   * For a text attribute this contains the text content. This is used by most
+   * attributes and represents the value that will be assigned to them. If this
+   * has been assigned then [isText] will be true.
+   *
+   * The entries in this list correspond to the entries in [bindings], and this
+   * will always have one more item than bindings. For example:
+   *
+   *     href="t0 {{b1}} t1 {{b2}} t2"
+   *
+   * Here textContent would be `["t0 ", " t1 ", " t2"]` and bindings would be
+   * `["b1", "b2"]`.
+   */
+  final List<String> textContent;
+
+  AttributeInfo(this.bindings, {this.isStyle: false, this.isClass: false,
+      this.textContent}) {
+
+    assert(isText || isClass || bindings.length == 1);
+    assert(bindings.length > 0);
+    assert(!isText || textContent.length == bindings.length + 1);
+    assert((isText ? 1 : 0) + (isClass ? 1 : 0) + (isStyle ? 1 : 0) <= 1);
+  }
+
+  /**
+   * A value that will be monitored for changes. All attributes have a single
+   * bound value unless [isClass] or [isText] is true.
    */
   String get boundValue => bindings[0];
 
-  /** All bound values that would be monitored for changes. */
-  List<String> bindings;
+  /** True if this attribute binding expression should be assigned directly. */
+  bool get isSimple => !isClass && !isStyle && !isText;
 
-  AttributeInfo(String value) : bindings = [value];
-  AttributeInfo.forClass(this.bindings) : isClass = true;
+  /**
+   * True if this attribute value should be concatenated as a string.
+   * This is true whenever [textContent] is non-null.
+   */
+  bool get isText => textContent != null;
 
   String toString() => '#<AttributeInfo '
       'isClass: $isClass, values: ${Strings.join(bindings, "")}>';
-
-  /**
-   * Generated fields for watcher disposers based on the bindings of this
-   * attribute.
-   */
-  List<String> stopperNames;
 }
 
 /** Information extracted for each declared event in an element. */
@@ -489,7 +552,9 @@ class TemplateInfo extends ElementInfo {
 
   TemplateInfo(Node node, ElementInfo parent,
       {this.ifCondition, this.loopVariable, this.loopItems})
-      : super(node, parent);
+      : super(node, parent) {
+    childrenCreatedInCode = hasIfCondition || hasIterate;
+  }
 
   /**
    * True when [node] is a '<template>' tag. False when [node] is any other
@@ -500,14 +565,6 @@ class TemplateInfo extends ElementInfo {
   bool get hasIfCondition => ifCondition != null;
 
   bool get hasIterate => loopVariable != null;
-
-  // TODO(jmesserly): this is wrong if we want to support document fragments.
-  ElementInfo get childInfo {
-    for (var info in children) {
-      if (info.node is Element) return info;
-    }
-    return null;
-  }
 
   String toString() => '#<TemplateInfo ${super.toString()}'
       'ifCondition: $ifCondition, '

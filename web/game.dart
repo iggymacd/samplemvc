@@ -51,10 +51,71 @@ process(msg, sendPort) {
       ports['logger'].send(msg);
       break;
     case START :
-      ports['logger'].send(msg);
+      //play hand 9 times
+      //Future<Map<String,Card>> playRoundResults = playRound(nextToPlay);
+      playRound(nextToPlay).then((result){
+        //ports['controller'].send(new Message.transferCard(nextToPlay).toMap());
+        ports['logger'].send(result);
+      });
       break;
     default:
       //sendPort.send(msg);
   }
 }
+Future<Map<String, String>> playRound(String startPosition){
+  Future result = new Future.immediate(new Map<String,String>());
+  Timer t;// = new Timer(500, (Timer timer){
+    
+  //});
+  for(int i = 0 ; i < 9 ; i++){
+    //t = new Timer(500, (Timer timer){
+    //});
+    //result = result.chain((value) => addDelay(value, 500));
+    result = result.chain((value) => playHand(value,i));
+  }
+  return result;
+}
 
+Future<Map<String, String>> addDelay(Map<String,String> target, int timeToWait){
+  Completer c = new Completer();
+  new Timer(timeToWait, (Timer timer){
+    c.complete(target);
+  });
+  return c.future;
+}
+
+Future<Map<String, String>> playHand(Map<String,String> target, int handNumber){
+  //ports['logger'].send({'test':'hand $handNumber'});
+  Future result = new Future.immediate(target);
+  for(int i = 0 ; i < 4 ; i++){
+    //ports['logger'].send({'test':'hand $handNumber , card $i'});
+    result = result.chain((value) => playCard(value, handNumber, i));
+  }
+  return result;
+}
+
+Future<Map<String, String>> playCard(Map<String,String> target, int handNumber, int cardNumber){
+  //ports['logger'].send({'test':'hand $handNumber'});
+  //Future result = new Future.immediate(target);
+  String currentPositionToPlay = nextToPlay;
+  Completer c = new Completer();
+  ReceivePort returnPort = new ReceivePort();
+  returnPort.receive((msg, _) {
+    //if (replyTo != null) replyTo.send(msg);
+    target['card ${counter++}'] = 'hand $handNumber :: card $cardNumber is $msg';
+    advanceNextToPlay(currentPositionToPlay);
+    c.complete(target);
+  } );
+  if(ports['controller'] != null){
+    ports['controller'].send(new Message.yourTurn(currentPositionToPlay).toMap(), returnPort.toSendPort());
+  }
+  return c.future;
+//  return result;
+}
+
+advanceNextToPlay(currentNextToPlay) {
+  int currentPosition = positions.indexOf(currentNextToPlay);
+  nextToPlay = positions[(currentPosition + 1) % 4];
+}
+
+num counter = 0;

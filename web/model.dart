@@ -30,6 +30,7 @@ class App {
   SendPort gamePort;
   ReceivePort loggerPort;
   ReceivePort controllerPort;
+  ReceivePort southPlayerPort;
   App(){
     cards = createDeck();
     decks = new Map<String,Deck>();
@@ -54,25 +55,81 @@ class App {
     loggerPort.receive((Map msg, _) {
       //if (msg.type == Message.MESSAGE) {
         //print('shutting down');
-        print(msg['from']);
+        //print(msg['from']);
         //print(msg.message);
         print(msg);
         //receiver.close();
       //}
     });
-//    controllerPort = new ReceivePort();
-//    controllerPort.receive((Map msg, _) {
-//      //if (msg.type == Message.MESSAGE) {
-//        //print('shutting down');
-//        print(msg['from']);
-//        //print(msg.message);
-//        print(msg);
-//        //receiver.close();
-//      //}
-//    });
+    southPlayerPort = new ReceivePort();
+    southPlayerPort.receive((msg, replyTo) {
+      replyTo.send(new Message('model','not your turn to play').toMap());
+    } );    
+    controllerPort = new ReceivePort();
+    controllerPort.receive((Map msg, replyTo) {
+      //if (msg.type == Message.MESSAGE) {
+        //print('shutting down');
+        if(msg['type'] == YOUR_TURN){
+          Future<Card> cardPlayed = playNextCard(msg['nextToPlay']);
+          cardPlayed.then(onSuccess(result){
+            if(result == null){
+              replyTo.send(new Message('model','player has no cards remaining').toMap());
+            }else{
+              replyTo.send(result.toMap());
+            }
+            dispatch();
+            southPlayerPort = new ReceivePort();
+            southPlayerPort.receive((msg, replyTo) {
+              replyTo.send(new Message('model','not your turn to play').toMap());
+            } );    
+          });
+        }
+        //print(msg.message);
+        //print(msg);
+        //receiver.close();
+      //}
+    });
     gamePort = spawnFunction(gameIsolate);
     gamePort.send(new Message.register('app','logger').toMap(), loggerPort.toSendPort());
-    //gamePort.send(new Message.setDealer('app', positions[dealer]).toMap(), loggerPort.toSendPort());
+    gamePort.send(new Message.register('app','controller').toMap(), controllerPort.toSendPort());
+    gamePort.send(new Message.setDealer('app', positions[dealer]).toMap(), loggerPort.toSendPort());
+  }
+
+  Future<Card> playNextCard(String currentNextToPlay) {
+    Future futureResult;
+    
+    if(currentNextToPlay == 'south'){
+      Completer c = new Completer();
+      southPlayerPort = new ReceivePort();
+      southPlayerPort.receive((msg, replyTo) {
+        decks['south'].isNextToPlay = false;
+        nextToPlay = positions.indexOf(currentNextToPlay);
+        decks['west'].isNextToPlay = true;
+        Card result;
+        Deck target = decks['round'];
+        Deck source = decks[currentNextToPlay];
+        print('there are ${source.cards.length} cards, and next to play is $currentNextToPlay');
+        String cardToRemove = '${msg['card']['rank']} of ${msg['card']['suit']}';
+        //print(cardToRemove);
+        result = source.removeCard(cardToRemove);
+        //result = source.removeLast();
+        target.addCard(result);
+        c.complete(result);
+      } );
+      futureResult = c.future;
+    }else{
+      decks[positions[nextToPlay]].isNextToPlay = false;
+      nextToPlay = positions.indexOf(currentNextToPlay);
+      decks[positions[nextToPlay]].isNextToPlay = true;
+      Card result;
+      Deck target = decks['round'];
+      Deck source = decks[currentNextToPlay];
+      print('there are ${source.cards.length} cards, and next to play is $currentNextToPlay');
+      result = source.removeLast();
+      target.addCard(result);
+      futureResult = new Future.immediate(result);
+  }
+    return futureResult;
   }
   
   
@@ -95,7 +152,7 @@ class App {
         nextPlayer++;
       }
 
-    //gamePort.send(new Message.start('app').toMap(), loggerPort.toSendPort());
+    gamePort.send(new Message.start('app').toMap(), loggerPort.toSendPort());
     
   }
   
@@ -106,8 +163,8 @@ class App {
       //if (replyTo != null) replyTo.send(msg);
       c.complete(msg);
     } );
-    if(gamePort != null){
-      gamePort.send(new Message.playCard(position,card).toMap(), returnPort.toSendPort());
+    if(southPlayerPort != null){
+      southPlayerPort.toSendPort().send(new Message.playCard(position,card).toMap(), returnPort.toSendPort());
     }
     return c.future;
   }

@@ -8,7 +8,13 @@ class Deck{
   bool isNextToPlay = false;
   
   void addCard(Card card){
-    card.classList.clear();
+    if(card == null){
+      return;
+    }
+    if(card.classList != null){
+      card.classList.clear();
+    }
+    
     card.classList.add('card');
     if(name == 'south'){
       card.isFaceUp = true;
@@ -32,7 +38,16 @@ class Deck{
     }
     cards[card.toString()] = card;
   }
-  void removeCard(String name){
-    cards.remove(name);
+  Card removeCard(String name){
+    return cards.remove(name);
+  }
+
+  Card removeLast() {
+    Card result;
+    Collection currentKeys = cards.keys;
+    if(currentKeys.length > 0){
+      return cards.remove((currentKeys as List)[0]);
+    }
+    return result;
   }
 }
